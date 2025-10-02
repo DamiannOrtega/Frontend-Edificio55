@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%; /* Sigue siendo blanco base, el degradado lo haremos con otras clases */
+    --foreground: 210 20% 25%; /* Gris oscuro para el texto principal */
+
+    --card: 0 0% 100%; /* Fondo de la tarjeta (el recuadro blanco) */
+    --card-foreground: 210 20% 25%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 20% 25%;
+
+    --primary: 210 60% 30%; /* AZUL MARINO OSCURO - Color principal para botones */
+    --primary-foreground: 0 0% 100%; /* Texto blanco para botones */
+
+    --secondary: 210 50% 90%; /* Azul claro suave */
+    --secondary-foreground: 210 60% 20%;
+
+    --muted: 210 30% 95%; /* Gris muy claro azulado */
+    --muted-foreground: 210 20% 45%;
+
+    --accent: 210 70% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 20% 88%; /* Borde gris azulado */
+    --input: 210 20% 88%;
+    --ring: 210 60% 30%; /* Anillo de foco (azul marino) */
+
+    --radius: 0.5rem;
+  }
+  .dark {
+    --background: 210 20% 15%; 
+    --foreground: 210 20% 90%;
+    --primary: 210 60% 50%;
+    --primary-foreground: 210 20% 10%;
+    --border: 210 20% 25%;
+    --input: 210 20% 25%;
+    --ring: 210 60% 50%;
+    --card: 210 20% 18%;
+    --card-foreground: 210 20% 90%;
+  }
+}
+
+
+/* Ahora sí puedes aplicar utilidades semánticas */
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
