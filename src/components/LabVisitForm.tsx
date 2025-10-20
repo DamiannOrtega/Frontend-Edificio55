@@ -59,12 +59,14 @@ export default function LabVisitForm() {
   const [softwareList, setSoftwareList] = useState<Software[]>([]);
   const [pcs, setPcs] = useState<PC[]>([]);
 
-  const { register, handleSubmit, formState: { errors }, setValue, reset: resetRegisterForm, watch } = useForm<RegisterFormData>({
+  const { register, handleSubmit, formState: { errors }, setValue, reset: resetRegisterForm, watch, trigger } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
+    mode: 'onBlur'
   });
 
   const { register: registerFinalize, handleSubmit: handleFinalizeSubmit, formState: { errors: finalizeErrors }, reset: resetFinalizeForm } = useForm<FinalizeFormData>({
     resolver: zodResolver(finalizeSchema),
+    mode: 'onBlur'
   });
 
   const selectedLab = watch("laboratorio");
@@ -115,14 +117,15 @@ export default function LabVisitForm() {
   }, [selectedSoftware, setValue]);
 
   const handleStudentIdBlur = async (event: React.FocusEvent<HTMLInputElement>) => {
+    trigger("id_estudiante");
     const studentId = event.target.value;
     if (studentId) {
       const response = await fetch(`http://127.0.0.1:8000/api/buscar-estudiante/?id_estudiante=${studentId}`);
       const data = await response.json();
       if (data.encontrado) {
-        setValue("nombre_completo", data.nombre);
-        setValue("correo", data.correo);
-        setValue("celular", data.celular || "");
+        setValue("nombre_completo", data.nombre, { shouldValidate: true });
+        setValue("correo", data.correo, { shouldValidate: true });
+        setValue("celular", data.celular || "", { shouldValidate: true });
       } else {
         setValue("nombre_completo", "");
         setValue("correo", "");
@@ -176,13 +179,15 @@ export default function LabVisitForm() {
   };
 
   return (
-    <div className="min-h-screen py-12 px-4 bg-gradient-to-br from-blue-50 to-blue-100">
+    <div className="min-h-screen py-12 px-4">
       <div className="mx-auto max-w-2xl">
         <div className="mb-8 text-center">
-          <h1 className="text-4xl font-bold text-gray-800">Laboratorio de Cómputo</h1>
-          <p className="text-lg text-gray-500">Registro de Visitas</p>
+          <img src="/logo.svg" alt="Logo UAA" className="mx-auto h-20 w-auto mb-4" />
+
+          <h1 className="text-4xl font-bold text-gray-800">Edificio 55</h1>
+          <p className="text-lg mt-2 text-gray-500">Registro de Uso de Laboratorios</p>
         </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-xl">
+        <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-2xl">
           <div className="mb-6 flex rounded-lg bg-gray-100 p-1">
             <button
               onClick={() => setMode('register')}
@@ -208,12 +213,12 @@ export default function LabVisitForm() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="nombre_completo" className="flex items-center gap-2 font-semibold"><User className="h-4 w-4" /> Nombre Completo</Label>
-                  <Input id="nombre_completo" {...register("nombre_completo")} placeholder="Juan Pérez" />
+                  <Input id="nombre_completo" {...register("nombre_completo")} placeholder="Ej. Juan Pérez García" />
                   {errors.nombre_completo && <p className="text-sm text-red-500">{errors.nombre_completo.message}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="correo" className="flex items-center gap-2 font-semibold"><Mail className="h-4 w-4" /> Correo Electrónico</Label>
-                  <Input id="correo" {...register("correo")} placeholder="juan.perez@universidad.com" />
+                  <Input id="correo" {...register("correo")} placeholder="Ej. al218721@edu.uaa.mx" />
                   {errors.correo && <p className="text-sm text-red-500">{errors.correo.message}</p>}
                 </div>
                 {/* Pega este bloque para el campo Celular */}
@@ -279,6 +284,6 @@ export default function LabVisitForm() {
           )}
         </div>
       </div>
-    </div>
+    </div >
   );
 }
