@@ -126,6 +126,7 @@ export default function LabVisitForm() {
         setValue("nombre_completo", data.nombre, { shouldValidate: true });
         setValue("correo", data.correo, { shouldValidate: true });
         setValue("celular", data.celular || "", { shouldValidate: true });
+        toast.success("¡ID encontrado!", { description: `Bienvenido/a ${data.nombre}. Tus datos se han cargado automáticamente.` });
       } else {
         setValue("nombre_completo", "");
         setValue("correo", "");

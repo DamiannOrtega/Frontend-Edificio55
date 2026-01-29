@@ -6,7 +6,21 @@ function App() {
   return (
     <>
       <LabVisitForm />
-      <Toaster richColors /> {/* Este componente muestra las notificaciones toast */}
+      <Toaster
+        richColors
+        position="top-center"
+        expand={true}
+        duration={5000}
+        toastOptions={{
+          style: {
+            fontSize: '16px',
+            padding: '16px 24px',
+            minWidth: '400px',
+            maxWidth: '600px',
+          },
+          className: 'toast-custom',
+        }}
+      /> {/* Este componente muestra las notificaciones toast */}
     </>
   )
 }
