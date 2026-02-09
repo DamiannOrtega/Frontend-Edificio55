@@ -13,7 +13,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Computer, User, Mail, Building, CodeSquare, LogIn, LogOut } from "lucide-react";
+import { Computer, User, Mail, Building, CodeSquare, LogIn, LogOut, GraduationCap } from "lucide-react";
+import { CarreraCombobox } from "@/components/ui/carrera-combobox";
 
 // Schema de validación para el formulario de registro
 const registerSchema = z.object({
@@ -27,16 +28,24 @@ const registerSchema = z.object({
   // 2. Validación para el correo (la que tenías es correcta)
   correo: z.string().email("El formato del correo no es válido."),
 
-  // 3. Validación para el celular
+  // 3. Validación para el celular (opcional, pero si se llena debe ser válido)
+  // IMPORTANTE: El orden de las validaciones importa - primero caracteres, luego longitud
   celular: z.string()
-    .length(10, { message: "El celular debe tener exactamente 10 dígitos." })
-    .regex(/^[0-9]+$/, { message: "El celular solo debe contener números." })
-    .optional() // Permite que el campo no se envíe
-    .or(z.literal('')), // O que se envíe como un string vacío
+    .optional()
+    .refine(
+      (val) => !val || val.length === 0 || /^[0-9]*$/.test(val),
+      { message: "El celular solo debe contener números." }
+    )
+    .refine(
+      (val) => !val || val.length === 0 || val.length === 10,
+      { message: "El celular debe tener exactamente 10 dígitos." }
+    ),
 
-  laboratorio: z.string().min(1, "Selecciona un laboratorio."),
-  software: z.string().min(1, "Selecciona un software."),
-  pc: z.string().min(1, "Selecciona una PC."),
+  carrera: z.string().min(1, { message: "Por favor selecciona tu carrera." }),
+
+  laboratorio: z.string().min(1, { message: "Por favor selecciona un laboratorio." }),
+  software: z.string().min(1, { message: "Por favor selecciona un software." }),
+  pc: z.string().min(1, { message: "Por favor selecciona una computadora." }),
 });
 
 // Schema de validación para el formulario de finalizar sesión
@@ -55,13 +64,16 @@ interface PC { id: number; numero_pc: number; }
 export default function LabVisitForm() {
   const [mode, setMode] = useState<'register' | 'finalize'>('register');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSearchingStudent, setIsSearchingStudent] = useState(false);
+  const [fieldsUnlocked, setFieldsUnlocked] = useState(false);
+  const [lastSearchedId, setLastSearchedId] = useState<string>(""); // Para evitar búsquedas duplicadas
   const [laboratorios, setLaboratorios] = useState<Laboratorio[]>([]);
   const [softwareList, setSoftwareList] = useState<Software[]>([]);
   const [pcs, setPcs] = useState<PC[]>([]);
 
   const { register, handleSubmit, formState: { errors }, setValue, reset: resetRegisterForm, watch, trigger } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
-    mode: 'onBlur'
+    mode: 'onChange' // Cambiado a onChange para validación en tiempo real
   });
 
   const { register: registerFinalize, handleSubmit: handleFinalizeSubmit, formState: { errors: finalizeErrors }, reset: resetFinalizeForm } = useForm<FinalizeFormData>({
@@ -71,6 +83,16 @@ export default function LabVisitForm() {
 
   const selectedLab = watch("laboratorio");
   const selectedSoftware = watch("software");
+
+  // Watch all required fields to enable/disable submit button
+  const idEstudiante = watch("id_estudiante");
+  const nombreCompleto = watch("nombre_completo");
+  const correo = watch("correo");
+  const carrera = watch("carrera");
+  const pc = watch("pc");
+
+  // Check if all required fields are filled
+  const isFormValid = idEstudiante && nombreCompleto && correo && carrera && selectedLab && selectedSoftware && pc;
 
   const fetchInitialData = async () => {
     try {
@@ -116,23 +138,55 @@ export default function LabVisitForm() {
     }
   }, [selectedSoftware, setValue]);
 
-  const handleStudentIdBlur = async (event: React.FocusEvent<HTMLInputElement>) => {
-    trigger("id_estudiante");
-    const studentId = event.target.value;
-    if (studentId) {
+  const searchStudent = async (studentId: string) => {
+    if (!studentId) {
+      setFieldsUnlocked(false);
+      return;
+    }
+
+    // Evitar búsquedas duplicadas del mismo ID
+    if (studentId === lastSearchedId) {
+      return;
+    }
+
+    setIsSearchingStudent(true);
+    setFieldsUnlocked(false);
+    try {
       const response = await fetch(`http://127.0.0.1:8000/api/buscar-estudiante/?id_estudiante=${studentId}`);
       const data = await response.json();
       if (data.encontrado) {
         setValue("nombre_completo", data.nombre, { shouldValidate: true });
         setValue("correo", data.correo, { shouldValidate: true });
         setValue("celular", data.celular || "", { shouldValidate: true });
+        setValue("carrera", data.carrera || "", { shouldValidate: true });
         toast.success("¡ID encontrado!", { description: `Bienvenido/a ${data.nombre}. Tus datos se han cargado automáticamente.` });
+        setLastSearchedId(studentId); // Guardar el ID buscado
       } else {
         setValue("nombre_completo", "");
         setValue("correo", "");
         setValue("celular", "");
+        setValue("carrera", "");
         toast.info("ID no encontrado. Por favor, completa tu registro.");
+        setLastSearchedId(studentId); // Guardar el ID buscado
       }
+    } finally {
+      setIsSearchingStudent(false);
+      setFieldsUnlocked(true);
+    }
+  };
+
+  const handleStudentIdBlur = async (event: React.FocusEvent<HTMLInputElement>) => {
+    trigger("id_estudiante");
+    const studentId = event.target.value;
+    await searchStudent(studentId);
+  };
+
+  const handleStudentIdKeyDown = async (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault(); // Prevenir que el formulario se envíe
+      trigger("id_estudiante");
+      const studentId = event.currentTarget.value;
+      await searchStudent(studentId);
     }
   };
 
@@ -151,6 +205,8 @@ export default function LabVisitForm() {
       const result = await response.json();
       toast.success("Registro Exitoso", { description: result.message });
       resetRegisterForm();
+      setLastSearchedId(""); // Resetear para permitir nueva búsqueda
+      setFieldsUnlocked(false); // Bloquear campos hasta nuevo ID
     } catch (error) {
       toast.error("Error en el registro", { description: (error as Error).message });
     } finally {
@@ -209,18 +265,25 @@ export default function LabVisitForm() {
             <form onSubmit={handleSubmit(onRegisterSubmit)} className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="id_estudiante" className="flex items-center gap-2 font-semibold"><User className="h-4 w-4" /> ID</Label>
-                <Input id="id_estudiante" {...register("id_estudiante")} onBlur={handleStudentIdBlur} placeholder="Tu ID" />
+                <Input
+                  id="id_estudiante"
+                  {...register("id_estudiante")}
+                  onBlur={handleStudentIdBlur}
+                  onKeyDown={handleStudentIdKeyDown}
+                  placeholder="Tu ID"
+                />
+                {isSearchingStudent && <p className="text-sm text-blue-500">Buscando...</p>}
                 {errors.id_estudiante && <p className="text-sm text-red-500">{errors.id_estudiante.message}</p>}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="nombre_completo" className="flex items-center gap-2 font-semibold"><User className="h-4 w-4" /> Nombre Completo</Label>
-                  <Input id="nombre_completo" {...register("nombre_completo")} placeholder="Ej. Juan Pérez García" />
+                  <Input id="nombre_completo" {...register("nombre_completo")} placeholder="Ej. Juan Pérez García" disabled={!fieldsUnlocked} />
                   {errors.nombre_completo && <p className="text-sm text-red-500">{errors.nombre_completo.message}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="correo" className="flex items-center gap-2 font-semibold"><Mail className="h-4 w-4" /> Correo Electrónico</Label>
-                  <Input id="correo" {...register("correo")} placeholder="Ej. al218721@edu.uaa.mx" />
+                  <Input id="correo" {...register("correo")} placeholder="Ej. al218721@edu.uaa.mx" disabled={!fieldsUnlocked} />
                   {errors.correo && <p className="text-sm text-red-500">{errors.correo.message}</p>}
                 </div>
                 {/* Pega este bloque para el campo Celular */}
@@ -231,7 +294,27 @@ export default function LabVisitForm() {
                     </svg>
                     Celular (Opcional)
                   </Label>
-                  <Input id="celular" {...register("celular")} placeholder="Ej. 4491234567" />
+                  <Input
+                    id="celular"
+                    {...register("celular")}
+                    placeholder="Ej. 4491234567"
+                    disabled={!fieldsUnlocked}
+                    maxLength={10}
+                    type="tel"
+                  />
+                  {errors.celular && <p className="text-sm text-red-500">{errors.celular.message}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="carrera" className="flex items-center gap-2 font-semibold">
+                    <GraduationCap className="h-4 w-4" />
+                    Carrera
+                  </Label>
+                  <CarreraCombobox
+                    value={watch("carrera")}
+                    onValueChange={(value) => setValue("carrera", value, { shouldValidate: true })}
+                    error={errors.carrera?.message}
+                    disabled={!fieldsUnlocked}
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -266,9 +349,14 @@ export default function LabVisitForm() {
                 </Select>
                 {errors.pc && <p className="text-sm text-red-500">{errors.pc.message}</p>}
               </div>
-              <Button type="submit" disabled={isSubmitting} className="w-full h-12">
+              <Button type="submit" disabled={isSubmitting || !isFormValid} className="w-full h-12">
                 {isSubmitting ? "Registrando..." : "Registrar Entrada"}
               </Button>
+              {!isFormValid && !isSubmitting && (
+                <p className="text-sm text-center text-gray-500 mt-2">
+                  Por favor completa todos los campos requeridos para continuar.
+                </p>
+              )}
             </form>
           ) : (
             <form onSubmit={handleFinalizeSubmit(onFinalizeSubmit)} className="space-y-6">
