@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -94,7 +94,11 @@ export default function LabVisitForm() {
   // Check if all required fields are filled
   const isFormValid = idEstudiante && nombreCompleto && correo && carrera && selectedLab && selectedSoftware && pc;
 
-  const fetchInitialData = async () => {
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Intervalo de actualización silenciosa (ms)
+  const POLL_INTERVAL = 60_000; // 60 segundos
+
+  const fetchAvailableLabs = async () => {
     try {
       const response = await fetch("http://127.0.0.1:8000/api/opciones-dinamicas/");
       if (!response.ok) throw new Error('No se pudo conectar con el servidor de Django.');
@@ -106,9 +110,67 @@ export default function LabVisitForm() {
     }
   };
 
+  // Refresca labs y PCs silenciosamente (sin mostrar errores al usuario)
+  const refreshAvailability = async (currentLab: string, currentSoftware: string) => {
+    try {
+      // Si el alumno eligió software primero, refrescamos labs por software
+      if (currentSoftware && !currentLab) {
+        const res = await fetch(`http://127.0.0.1:8000/api/opciones-dinamicas/?software_id=${currentSoftware}`);
+        const data = await res.json();
+        setLaboratorios(data.laboratorios);
+        return;
+      }
+
+      // Refrescar lista general de labs disponibles
+      const res = await fetch("http://127.0.0.1:8000/api/opciones-dinamicas/");
+      if (!res.ok) return;
+      const data = await res.json();
+      const nuevosLabs: Laboratorio[] = data.laboratorios;
+      setLaboratorios(nuevosLabs);
+
+      // Si el alumno tenía un lab seleccionado y ya no está disponible, avisarle
+      if (currentLab) {
+        const sigueDisponible = nuevosLabs.some((l) => String(l.id) === currentLab);
+        if (!sigueDisponible) {
+          setValue("laboratorio", "");
+          setValue("pc", "");
+          setPcs([]);
+          toast.warning("Laboratorio no disponible", {
+            description: "El laboratorio que seleccionaste ya no está disponible. Por favor elige otro.",
+          });
+          return;
+        }
+
+        // El lab sigue disponible: actualizar PCs (puede haber cambiado su estado)
+        const resLab = await fetch(`http://127.0.0.1:8000/api/opciones-dinamicas/?laboratorio_id=${currentLab}`);
+        if (!resLab.ok) return;
+        const dataLab = await resLab.json();
+        setPcs(dataLab.pcs);
+      }
+    } catch {
+      // Silencioso: no interrumpir al alumno con errores de red
+    }
+  };
+
+  // Carga inicial
   useEffect(() => {
-    fetchInitialData();
+    fetchAvailableLabs();
   }, []);
+
+  // Polling silencioso de disponibilidad
+  useEffect(() => {
+    pollingRef.current = setInterval(() => {
+      // Leemos los valores actuales del form en el momento del tick
+      const labActual = watch("laboratorio") ?? "";
+      const swActual  = watch("software")    ?? "";
+      refreshAvailability(labActual, swActual);
+    }, POLL_INTERVAL);
+
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   useEffect(() => {
     if (selectedLab) {
