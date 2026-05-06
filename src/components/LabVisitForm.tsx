@@ -95,12 +95,15 @@ export default function LabVisitForm() {
   const isFormValid = idEstudiante && nombreCompleto && correo && carrera && selectedLab && selectedSoftware && pc;
 
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Ref para que el polling siempre lea los valores actuales del form (evita stale closure)
+  const currentLabRef = useRef<string>("");
+  const currentSoftwareRef = useRef<string>("");
   // Intervalo de actualización silenciosa (ms)
-  const POLL_INTERVAL = 60_000; // 60 segundos
+  const POLL_INTERVAL = 15_000; // 15 segundos
 
   const fetchAvailableLabs = async () => {
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/opciones-dinamicas/");
+      const response = await fetch("http://127.0.0.1:8000/api/opciones-dinamicas/", { cache: 'no-store' });
       if (!response.ok) throw new Error('No se pudo conectar con el servidor de Django.');
       const data = await response.json();
       setLaboratorios(data.laboratorios);
@@ -115,14 +118,17 @@ export default function LabVisitForm() {
     try {
       // Si el alumno eligió software primero, refrescamos labs por software
       if (currentSoftware && !currentLab) {
-        const res = await fetch(`http://127.0.0.1:8000/api/opciones-dinamicas/?software_id=${currentSoftware}`);
+        const res = await fetch(
+          `http://127.0.0.1:8000/api/opciones-dinamicas/?software_id=${currentSoftware}`,
+          { cache: 'no-store' }
+        );
         const data = await res.json();
         setLaboratorios(data.laboratorios);
         return;
       }
 
       // Refrescar lista general de labs disponibles
-      const res = await fetch("http://127.0.0.1:8000/api/opciones-dinamicas/");
+      const res = await fetch("http://127.0.0.1:8000/api/opciones-dinamicas/", { cache: 'no-store' });
       if (!res.ok) return;
       const data = await res.json();
       const nuevosLabs: Laboratorio[] = data.laboratorios;
@@ -142,7 +148,10 @@ export default function LabVisitForm() {
         }
 
         // El lab sigue disponible: actualizar PCs (puede haber cambiado su estado)
-        const resLab = await fetch(`http://127.0.0.1:8000/api/opciones-dinamicas/?laboratorio_id=${currentLab}`);
+        const resLab = await fetch(
+          `http://127.0.0.1:8000/api/opciones-dinamicas/?laboratorio_id=${currentLab}`,
+          { cache: 'no-store' }
+        );
         if (!resLab.ok) return;
         const dataLab = await resLab.json();
         setPcs(dataLab.pcs);
@@ -157,17 +166,33 @@ export default function LabVisitForm() {
     fetchAvailableLabs();
   }, []);
 
+  // Mantener los refs actualizados cada vez que cambian lab o software
+  useEffect(() => {
+    currentLabRef.current = selectedLab ?? "";
+  }, [selectedLab]);
+
+  useEffect(() => {
+    currentSoftwareRef.current = selectedSoftware ?? "";
+  }, [selectedSoftware]);
+
   // Polling silencioso de disponibilidad
   useEffect(() => {
+    // Usa refs para leer siempre los valores más recientes (evita stale closure)
     pollingRef.current = setInterval(() => {
-      // Leemos los valores actuales del form en el momento del tick
-      const labActual = watch("laboratorio") ?? "";
-      const swActual  = watch("software")    ?? "";
-      refreshAvailability(labActual, swActual);
+      refreshAvailability(currentLabRef.current, currentSoftwareRef.current);
     }, POLL_INTERVAL);
+
+    // Actualiza inmediatamente cuando el usuario vuelve a la pestaña
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshAvailability(currentLabRef.current, currentSoftwareRef.current);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -175,7 +200,10 @@ export default function LabVisitForm() {
   useEffect(() => {
     if (selectedLab) {
       async function fetchLabOptions() {
-        const response = await fetch(`http://127.0.0.1:8000/api/opciones-dinamicas/?laboratorio_id=${selectedLab}`);
+        const response = await fetch(
+          `http://127.0.0.1:8000/api/opciones-dinamicas/?laboratorio_id=${selectedLab}`,
+          { cache: 'no-store' }
+        );
         const data = await response.json();
         setSoftwareList(data.software);
         setPcs(data.pcs);
@@ -189,7 +217,10 @@ export default function LabVisitForm() {
     if (selectedSoftware) {
       if (selectedLab) return;
       async function fetchSoftwareOptions() {
-        const response = await fetch(`http://127.0.0.1:8000/api/opciones-dinamicas/?software_id=${selectedSoftware}`);
+        const response = await fetch(
+          `http://127.0.0.1:8000/api/opciones-dinamicas/?software_id=${selectedSoftware}`,
+          { cache: 'no-store' }
+        );
         const data = await response.json();
         setLaboratorios(data.laboratorios);
         setValue("laboratorio", "");
